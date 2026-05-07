@@ -16,7 +16,6 @@ PlasmoidItem {
 
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
 
-    // Propriété configurable
     property real bgOpacity: Plasmoid.configuration.backgroundOpacity
 
     // ── État interne ──────────────────────────────────────────────
@@ -27,10 +26,8 @@ PlasmoidItem {
     property string lastStatus:       "Prêt."
     property bool   applying:         false
 
-    // ── Chemin config ─────────────────────────────────────────────
-    // On laisse bash résoudre $HOME lui-même — fiable dans tous les contextes
-    readonly property string configPath: "$HOME/.config/inactivity/config"
-    readonly property string configDir:  "$HOME/.config/inactivity"
+    // Flag pour distinguer lecture / écriture dans onNewData
+    property bool   isReading:        false
 
     // ── DataSource ────────────────────────────────────────────────
     P5Support.DataSource {
@@ -44,7 +41,8 @@ PlasmoidItem {
             var exit = data["exit code"] !== undefined ? data["exit code"] : 0
             disconnectSource(source)
 
-            if (source.startsWith("cat ")) {
+            if (root.isReading) {
+                root.isReading = false
                 if (out !== "") {
                     parseConfig(out)
                     root.lastStatus = "✓ Config chargée."
@@ -70,23 +68,26 @@ PlasmoidItem {
             if (idx < 0) continue
             var key = line.substring(0, idx).trim()
             var val = line.substring(idx + 1).trim()
-            if (key === "HIBERNATE")          root.hibernate         = parseInt(val) || 0
-            if (key === "SLEEP_TIMEOUT")      root.sleepTimeout      = parseInt(val) || 15
-            if (key === "HIBERNATE_TIMEOUT")  root.hibernateTimeout  = parseInt(val) || 15
+            if (key === "HIBERNATE")          root.hibernate         = parseInt(val, 10) || 0
+            if (key === "SLEEP_TIMEOUT")      root.sleepTimeout      = parseInt(val, 10) || 15
+            if (key === "HIBERNATE_TIMEOUT")  root.hibernateTimeout  = parseInt(val, 10) || 15
             if (key === "LID_ACTION")         root.lidAction         = val
         }
+        // Force la mise à jour du slider
+        timeoutSlider.value = root.hibernate ? root.hibernateTimeout : root.sleepTimeout
     }
 
     // ── Lecture ───────────────────────────────────────────────────
     function loadConfig() {
         root.lastStatus = "Lecture…"
-        // bash -c pour que $HOME soit résolu par le shell de l'utilisateur
+        root.isReading = true
         executable.connectSource("bash -c 'cat $HOME/.config/inactivity/config 2>/dev/null'")
     }
 
     // ── Écriture ──────────────────────────────────────────────────
     function applyConfig() {
         root.applying = true
+        root.isReading = false
         root.lastStatus = "Sauvegarde…"
 
         var content = "HIBERNATE="         + root.hibernate         + "\\n"
@@ -94,7 +95,6 @@ PlasmoidItem {
                     + "HIBERNATE_TIMEOUT=" + root.hibernateTimeout  + "\\n"
                     + "LID_ACTION="        + root.lidAction         + "\\n"
 
-        // printf avec \n littéraux interprétés par bash
         var cmd = "bash -c 'mkdir -p $HOME/.config/inactivity && printf \""
                 + content
                 + "\" > $HOME/.config/inactivity/config'"
@@ -135,14 +135,14 @@ PlasmoidItem {
                 Item { Layout.fillWidth: true }
                 Rectangle {
                     radius: 4
-                    color: root.hibernate ? "#3d5a80" : "#2d7d46"
+                    color: root.hibernate === 1 ? "#3d5a80" : "#2d7d46"
                     implicitWidth: modeLbl.implicitWidth + 14
                     Layout.maximumWidth: implicitWidth
                     height: 22
                     PlasmaComponents.Label {
                         id: modeLbl
                         anchors.centerIn: parent
-                        text: root.hibernate ? "Hibernation" : "Veille"
+                        text: root.hibernate === 1 ? "Hibernation" : "Veille"
                         font.pixelSize: 11; font.bold: true; color: "white"
                     }
                 }
@@ -154,19 +154,26 @@ PlasmoidItem {
             PlasmaComponents.Label {
                 text: "Mode de suspension"
                 font.pixelSize: 11
-                color: Kirigami.Theme.disabledTextColor
+                color: "white"
+                //color: Kirigami.Theme.disabledTextColor
             }
             RowLayout {
                 Layout.fillWidth: true; spacing: 6
                 PlasmaComponents.Button {
                     Layout.fillWidth: true; text: "Veille"
                     highlighted: root.hibernate === 0
-                    onClicked: root.hibernate = 0
+                    onClicked: {
+                        root.hibernate = 0
+                        timeoutSlider.value = root.sleepTimeout
+                    }
                 }
                 PlasmaComponents.Button {
                     Layout.fillWidth: true; text: "Hibernation"
                     highlighted: root.hibernate === 1
-                    onClicked: root.hibernate = 1
+                    onClicked: {
+                        root.hibernate = 1
+                        timeoutSlider.value = root.hibernateTimeout
+                    }
                 }
             }
 
@@ -176,28 +183,33 @@ PlasmoidItem {
                 PlasmaComponents.Label {
                     text: "Délai d'inactivité"
                     font.pixelSize: 11
-                    color: Kirigami.Theme.disabledTextColor
+                    color: "white"
+                    //color: Kirigami.Theme.disabledTextColor
                 }
                 Item { Layout.fillWidth: true }
                 PlasmaComponents.Label {
-                    text: (root.hibernate ? root.hibernateTimeout : root.sleepTimeout) + " min"
+                    text: (root.hibernate === 1 ? root.hibernateTimeout : root.sleepTimeout) + " min"
                     font.bold: true; font.pixelSize: 12
                 }
             }
+
+            // Slider sans liaison automatique — géré manuellement
             QQC2.Slider {
+                id: timeoutSlider
                 Layout.fillWidth: true
                 from: 1; to: 60; stepSize: 1
-                value: root.hibernate ? root.hibernateTimeout : root.sleepTimeout
+                value: root.sleepTimeout   // valeur initiale seulement
                 onMoved: {
-                    if (root.hibernate) root.hibernateTimeout = Math.round(value)
-                    else                root.sleepTimeout     = Math.round(value)
+                    if (root.hibernate === 1) root.hibernateTimeout = Math.round(value)
+                    else                      root.sleepTimeout     = Math.round(value)
                 }
             }
+
             RowLayout {
                 Layout.fillWidth: true
-                PlasmaComponents.Label { text: "1 min";  font.pixelSize: 10; color: Kirigami.Theme.disabledTextColor }
+                PlasmaComponents.Label { text: "1 min";  font.pixelSize: 10; color: "white" } //Kirigami.Theme.disabledTextColor }
                 Item { Layout.fillWidth: true }
-                PlasmaComponents.Label { text: "60 min"; font.pixelSize: 10; color: Kirigami.Theme.disabledTextColor }
+                PlasmaComponents.Label { text: "60 min"; font.pixelSize: 10; color: "white" } //Kirigami.Theme.disabledTextColor }
             }
 
             Kirigami.Separator { Layout.fillWidth: true }
@@ -206,7 +218,8 @@ PlasmoidItem {
             PlasmaComponents.Label {
                 text: "Fermeture du couvercle"
                 font.pixelSize: 11
-                color: Kirigami.Theme.disabledTextColor
+                color: "white"
+                //color: Kirigami.Theme.disabledTextColor
             }
             RowLayout {
                 Layout.fillWidth: true; spacing: 6
@@ -251,7 +264,7 @@ PlasmoidItem {
             // Boutons
             PlasmaComponents.Button {
                 Layout.fillWidth: true
-                text: root.applying ? "Application…" : "Appliquer & Recharger"
+                text: root.applying ? "Application…" : "Appliquer & Sauvegarder"
                 enabled: !root.applying
                 icon.name: "dialog-ok-apply"
                 onClicked: root.applyConfig()
