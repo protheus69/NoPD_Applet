@@ -40,7 +40,6 @@ PlasmoidItem {
             var err  = (data["stderr"] || "").trim()
             var exit = data["exit code"] !== undefined ? data["exit code"] : 0
             disconnectSource(source)
-
             if (root.isReading) {
                 root.isReading = false
                 if (out !== "") {
@@ -73,8 +72,6 @@ PlasmoidItem {
             if (key === "HIBERNATE_TIMEOUT")  root.hibernateTimeout  = parseInt(val, 10) || 15
             if (key === "LID_ACTION")         root.lidAction         = val
         }
-        // Force la mise à jour du slider
-        timeoutSlider.value = root.hibernate ? root.hibernateTimeout : root.sleepTimeout
     }
 
     // ── Lecture ───────────────────────────────────────────────────
@@ -159,20 +156,24 @@ PlasmoidItem {
             }
             RowLayout {
                 Layout.fillWidth: true; spacing: 6
-                PlasmaComponents.Button {
+                QQC2.Button {
+                //PlasmaComponents.Button {
                     Layout.fillWidth: true; text: "Veille"
-                    highlighted: root.hibernate === 0
+                    checkable: true
+                    checked: root.hibernate === 0
                     onClicked: {
                         root.hibernate = 0
-                        timeoutSlider.value = root.sleepTimeout
+                        //timeoutSlider.value = root.sleepTimeout
                     }
                 }
-                PlasmaComponents.Button {
+                QQC2.Button {
+                //PlasmaComponents.Button {
                     Layout.fillWidth: true; text: "Hibernation"
-                    highlighted: root.hibernate === 1
+                    checkable: true
+                    checked: root.hibernate === 1
                     onClicked: {
                         root.hibernate = 1
-                        timeoutSlider.value = root.hibernateTimeout
+                        //timeoutSlider.value = root.hibernateTimeout
                     }
                 }
             }
@@ -198,7 +199,8 @@ PlasmoidItem {
                 id: timeoutSlider
                 Layout.fillWidth: true
                 from: 1; to: 60; stepSize: 1
-                value: root.sleepTimeout   // valeur initiale seulement
+                value: root.hibernate === 1 ? root.hibernateTimeout : root.sleepTimeout
+                //value: root.sleepTimeout   // valeur initiale seulement
                 onMoved: {
                     if (root.hibernate === 1) root.hibernateTimeout = Math.round(value)
                     else                      root.sleepTimeout     = Math.round(value)
@@ -223,19 +225,25 @@ PlasmoidItem {
             }
             RowLayout {
                 Layout.fillWidth: true; spacing: 6
-                PlasmaComponents.Button {
+                QQC2.Button {
+                //PlasmaComponents.Button {
                     Layout.fillWidth: true; text: "Hiberner"
-                    highlighted: root.lidAction === "hibernate"
+                    checkable: true
+                    checked: root.lidAction === "hibernate"
                     onClicked: root.lidAction = "hibernate"
                 }
-                PlasmaComponents.Button {
+                QQC2.Button {
+                //PlasmaComponents.Button {
                     Layout.fillWidth: true; text: "Veille"
-                    highlighted: root.lidAction === "suspend"
+                    checkable: true
+                    checked: root.lidAction === "suspend"
                     onClicked: root.lidAction = "suspend"
                 }
-                PlasmaComponents.Button {
+                QQC2.Button {
+                //PlasmaComponents.Button {
                     Layout.fillWidth: true; text: "Ignorer"
-                    highlighted: root.lidAction === "ignore"
+                    checkable: true
+                    checked: root.lidAction === "ignore"
                     onClicked: root.lidAction = "ignore"
                 }
             }
